@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: ogabassey-order-desk-mcp
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /health
+    envVars:
+      - key: BUMPA_BASE_URL
+        value: https://api.bumpa.xyz/api/commerce/v1
+      - key: BUMPA_PUBLIC_KEY
+        sync: false
+      - key: BUMPA_SECRET_KEY
+        sync: false
+      - key: BUMPA_LOCATION_ID
+        sync: false
+      - key: BUMPA_PICKUP_LOCATION_ID
+        sync: false
+      - key: BUMPA_SHIPPING_METHOD_ID
+        sync: false
+      - key: MCP_AUTH_TOKEN
+        generateValue: true
