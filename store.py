@@ -93,3 +93,23 @@ def imei_used(imei, exclude_checkout_id):
         row = c.execute("SELECT checkout_id FROM orders WHERE imei=%s AND checkout_id!=%s",
                         (imei, exclude_checkout_id)).fetchone()
     return row["checkout_id"] if row else None
+
+
+def find_for_phone(phone, open_only=True, days=7):
+    """Newest-first orders for a customer phone (matched on the last 10 digits, so +234 and 0 prefixes agree).
+    The model can lose a checkout id between WhatsApp messages; the customer's phone is always in the chat."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())[-10:]
+    if len(digits) < 7:
+        return []
+    with _db() as c:
+        rows = c.execute("SELECT * FROM orders WHERE created_at>=%s ORDER BY created_at DESC",
+                         (time.time() - days * 86400,)).fetchall()
+    out = []
+    for r in rows:
+        try:
+            p = json.loads(r["customer"] or "{}").get("phone", "")
+        except ValueError:
+            continue
+        if "".join(ch for ch in p if ch.isdigit())[-10:] == digits and (not open_only or r["status"] != "finalized"):
+            out.append(r)
+    return out

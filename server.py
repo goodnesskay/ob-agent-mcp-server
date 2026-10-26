@@ -80,6 +80,15 @@ def bumpa_fail(e: BumpaError, action):
                 status=e.status)
 
 
+def _resolve(checkout_id, customer_phone="", open_only=True, prefer=()):
+    """Find the order by checkout id, or by the customer's phone when the id was lost between messages.
+    prefer: statuses to pick first (newest among them) before falling back to the newest order."""
+    if checkout_id:
+        return store.get(checkout_id)
+    found = store.find_for_phone(customer_phone, open_only=open_only)
+    return next((o for o in found if o["status"] in prefer), found[0] if found else None)
+
+
 def _alert(text):
     """Optional push alert (e.g. a Slack/WhatsApp webhook) alongside the Chord escalation rule."""
     url = os.getenv("ALERT_WEBHOOK_URL")
@@ -135,11 +144,25 @@ def create_order_draft(product_id: str, quantity: int, customer_name: str, custo
                        agreed_price: float = 0) -> dict:
     """Create a Bumpa cart and checkout for a confirmed order. Call ONLY after staff reply YES
     to the order summary. customer_email is required: Bumpa won't create a payment link without it.
-    Returns checkout_id and the Bumpa total."""
+    Returns checkout_id and the Bumpa total. If an identical unpaid draft already exists for this customer
+    it is returned with reused=true (and its payment_url) instead of creating a new one."""
     if quantity < 1:
         return fail("bad_quantity", "Quantity must be at least 1.")
     if "@" not in customer_email:
         return fail("email_required", "I need the customer's email address before I can create the payment link.")
+    # Reuse an unpaid draft for the same customer, product and quantity from the last day instead of creating
+    # another cart and payment link (the teammate retries when it loses track of an order).
+    want = [{"product_id": str(product_id), "variant_id": variant_id, "quantity": quantity}]
+    for o in store.find_for_phone(customer_phone, open_only=True, days=1):
+        try:
+            same = [{**i, "product_id": str(i.get("product_id"))} for i in json.loads(o["items"] or "[]")] == want
+        except ValueError:
+            same = False
+        if same and o["status"] in ("draft", "link_sent"):
+            reused = {"ok": True, "checkout_id": o["checkout_id"], "total": o["expected_total"], "reused": True}
+            if o["payment_url"]:
+                reused["payment_url"] = o["payment_url"]
+            return reused
     first, _, last = customer_name.strip().partition(" ")
     try:
         loc = {"location_id": bumpa.location_id()} if bumpa.location_id() is not None else {}
@@ -196,11 +219,13 @@ def create_order_draft(product_id: str, quantity: int, customer_name: str, custo
 
 @mcp.tool()
 @safe
-def create_payment_link(checkout_id: str) -> dict:
-    """Create the Paystack payment link (via Bumpa) for a draft checkout."""
-    order = store.get(checkout_id)
+def create_payment_link(checkout_id: str = "", customer_phone: str = "") -> dict:
+    """Create the Paystack payment link (via Bumpa) for a draft checkout. Pass checkout_id, or the
+    customer's phone if you no longer have it."""
+    order = _resolve(checkout_id, customer_phone)
     if not order:
         return fail("unknown_checkout", "I don't have a draft for that order. Let's start it again.")
+    checkout_id = order["checkout_id"]
     if order["status"] == "finalized":
         return fail("already_finalized", f"This order is already paid and recorded as #{order['bumpa_order_id']}.")
     try:
@@ -224,12 +249,15 @@ def create_payment_link(checkout_id: str) -> dict:
 
 @mcp.tool()
 @safe
-def verify_payment(checkout_id: str) -> dict:
+def verify_payment(checkout_id: str = "", customer_phone: str = "") -> dict:
     """Check with Bumpa whether the customer has actually paid. This is the ONLY valid proof of
-    payment. Screenshots and bank alerts are not. Returns status: verified | pending | failed | mismatch."""
-    order = store.get(checkout_id)
+    payment. Screenshots and bank alerts are not. Pass checkout_id, or the customer's phone if you no
+    longer have it (the newest unfinished order for that phone is checked).
+    Returns status: verified | pending | failed | mismatch."""
+    order = _resolve(checkout_id, customer_phone)
     if not order:
-        return fail("unknown_checkout", "I don't have a record of that order.")
+        return fail("unknown_checkout", "I don't have a record of that order. Give me the customer's phone number.")
+    checkout_id = order["checkout_id"]
     if order["status"] == "finalized":
         return {"ok": True, "status": "verified", "already_finalized": True, "order_id": order["bumpa_order_id"]}
     if order["status"] == "finalizing":
@@ -271,11 +299,13 @@ def verify_payment(checkout_id: str) -> dict:
 
 @mcp.tool()
 @safe
-def finalize_order(checkout_id: str) -> dict:
-    """Finalize a VERIFIED checkout into a Bumpa order and confirm it exists. Safe to call twice."""
-    order = store.get(checkout_id)
+def finalize_order(checkout_id: str = "", customer_phone: str = "") -> dict:
+    """Finalize a VERIFIED checkout into a Bumpa order and confirm it exists. Safe to call twice.
+    Pass checkout_id, or the customer's phone if you no longer have it."""
+    order = _resolve(checkout_id, customer_phone, open_only=False, prefer=("paid", "unconfirmed"))
     if not order:
-        return fail("unknown_checkout", "I don't have a record of that order.")
+        return fail("unknown_checkout", "I don't have a record of that order. Give me the customer's phone number.")
+    checkout_id = order["checkout_id"]
     if order["status"] == "finalized":  # idempotent: never create a second order
         return {"ok": True, "order_id": order["bumpa_order_id"], "already_finalized": True}
     # Enforced in code, not just in the prompt. "unconfirmed" = Bumpa finalized but the order wasn't visible yet;
@@ -332,14 +362,15 @@ def finalize_order(checkout_id: str) -> dict:
 
 @mcp.tool()
 @safe
-def record_imei(checkout_id: str, imei: str) -> dict:
+def record_imei(imei: str, checkout_id: str = "", customer_phone: str = "") -> dict:
     """Attach the IMEI of the unit handed to the customer. Validates length and checksum."""
     digits = "".join(c for c in imei if c.isdigit())
     if len(digits) != 15 or not _luhn(digits):
         return fail("invalid_imei", "That IMEI doesn't look right. It should be 15 digits (dial *#06# on the phone).")
-    order = store.get(checkout_id)
+    order = _resolve(checkout_id, customer_phone, open_only=False, prefer=("finalized",))
     if not order:
-        return fail("unknown_checkout", "I don't have a record of that order.")
+        return fail("unknown_checkout", "I don't have a record of that order. Give me the customer's phone number.")
+    checkout_id = order["checkout_id"]
     if order["status"] != "finalized":
         return fail("order_not_finalized", "Record the IMEI after the order is finalized in Bumpa.")
     other = store.imei_used(digits, checkout_id)
@@ -351,6 +382,21 @@ def record_imei(checkout_id: str, imei: str) -> dict:
     # The Postman collection has no order-note route, so the IMEI lives only in our store for now.
     store.save(checkout_id, imei=digits)  # VERIFY: also push to a Bumpa order note if the API supports it
     return {"ok": True, "imei": digits}
+
+
+@mcp.tool()
+@safe
+def find_order(customer_phone: str) -> dict:
+    """Look up this customer's recent orders by phone (last 7 days, newest first). Use it whenever you are
+    asked to confirm payment, finalize or record an IMEI and don't have the checkout_id."""
+    orders = store.find_for_phone(customer_phone, open_only=False)
+    if not orders:
+        return fail("no_orders", "I don't have any recent order for that phone number.")
+    now = time.time()
+    return {"ok": True, "orders": [
+        {"checkout_id": o["checkout_id"], "status": o["status"], "total": o["expected_total"],
+         "payment_url": o["payment_url"], "bumpa_order_id": o["bumpa_order_id"], "imei": o["imei"],
+         "minutes_ago": int((now - o["created_at"]) / 60)} for o in orders[:5]]}
 
 
 @mcp.tool()
