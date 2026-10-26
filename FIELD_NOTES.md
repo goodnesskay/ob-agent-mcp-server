@@ -2,6 +2,8 @@
 
 Running log of real build/deploy problems. One entry per problem, written when it happens. No invented entries.
 
+> **Read this first: the Bumpa Commerce API is new and not yet stable.** This project is one of the first integrations to run against it, so several problems below are Bumpa-side (docs pointing at the wrong staging host, no example responses, undocumented status values, staging routes that 404 or 500) rather than mistakes in our code. Treat every Bumpa response shape and status word here as observed on staging on the dates given, not as a guaranteed contract, and re-check them if Bumpa ships a change. Entries say "What Chord/Bumpa should change" so the platform teams can use them as feedback.
+
 ## Template
 
 ### YYYY-MM-DD: short title
