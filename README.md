@@ -20,4 +20,4 @@ and the payment statuses at the top of `server.py`) against a real staging respo
 Set ONE of `BUMPA_PICKUP_LOCATION_ID` / `BUMPA_SHIPPING_METHOD_ID`, and `MCP_AUTH_TOKEN`
 (the server refuses `/mcp` without it; `ALLOW_NO_AUTH=1` is for local dev only).
 `create_order_draft` now requires `customer_email` (Bumpa won't create a payment link without it).
-Note: SQLite on a Render free web service is wiped on redeploy; use a persistent disk for real use.
+Order state lives in Postgres (`DATABASE_URL`); `render.yaml` provisions one on Render.

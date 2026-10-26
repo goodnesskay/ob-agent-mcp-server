@@ -15,6 +15,12 @@ import time
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+try:  # local dev: read .env before bumpa/store read the environment
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import bumpa
 import store
 from bumpa import BumpaError, pick

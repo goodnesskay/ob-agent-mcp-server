@@ -15,12 +15,12 @@ skills/ogabassey-order-desk.md     Chord skill file (business context, workflow,
 mcp-server/                        [currently flat in the repo root]
   server.py    FastMCP tool server (8 tools), bearer auth, /health
   bumpa.py     Bumpa API client; ALL endpoint paths and assumed response fields live here
-  store.py     SQLite order state (cart tokens stay server-side)
+  store.py     Postgres order state (cart tokens stay server-side)
   render.yaml, requirements.txt, .env.example, README.md
 ```
 
 ## Stack
-Python 3.11+, the `mcp` SDK pinned `<2` (v2 renamed FastMCP to MCPServer; don't upgrade), httpx, uvicorn, sqlite3. Hosted on Render. Chord connects to it as a remote MCP server over streamable HTTP at `/mcp`, with `Authorization: Bearer $MCP_AUTH_TOKEN`.
+Python 3.11+, the `mcp` SDK pinned `<2` (v2 renamed FastMCP to MCPServer; don't upgrade), httpx, uvicorn, psycopg (Postgres). Hosted on Render. Chord connects to it as a remote MCP server over streamable HTTP at `/mcp`, with `Authorization: Bearer $MCP_AUTH_TOKEN`.
 
 ## Bumpa API (staging)
 - Base: `https://api.bumpa.xyz/api/commerce/v1`. Docs: https://docs.bumpa.io
