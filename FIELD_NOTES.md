@@ -37,3 +37,11 @@ Running log of real build/deploy problems. One entry per problem, written when i
 - **Fix:** Updated paths and bodies. Response field names are still unconfirmed and stay marked VERIFY.
 - **What Chord/Bumpa should change:** Bumpa: add example responses. Payment intent needs `customer_context.email`, which a WhatsApp order chat rarely has; the skill must ask for it.
 - **Time lost:** None (caught before running).
+
+### 2026-10-26: Deployed /mcp returns 421 "Invalid Host header"
+- **What happened:** After deploying to Render, `/health` returned 200 and `/mcp` returned 401 without a token, but a request with a valid bearer token to `/mcp` returned 421.
+- **Exact error:** `HTTP 421` with body `Invalid Host header` (from `https://ob-agent-mcp-server.onrender.com/mcp`).
+- **How the cause was found:** The 401 check passed our auth layer, so the 421 had to come from the MCP SDK; its FastMCP enables DNS-rebinding protection with a localhost-only host allow-list by default.
+- **Fix:** Pass `TransportSecuritySettings` with the Render hostname (`RENDER_EXTERNAL_HOSTNAME`) in `allowed_hosts`. Not yet re-tested on Render: this machine has no Python 3.10+ to run the `mcp` SDK locally.
+- **What Chord/Bumpa should change:** Chord docs for remote MCP hosting should mention this default; the MCP SDK could document it next to the Render/hosted-deploy guidance.
+- **Time lost:** Found during first post-deploy test; fix not yet confirmed.

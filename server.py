@@ -14,6 +14,7 @@ import time
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 try:  # local dev: read .env before bumpa/store read the environment
     from dotenv import load_dotenv
@@ -28,7 +29,18 @@ from bumpa import BumpaError, pick
 log = logging.getLogger("order-desk")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-mcp = FastMCP("ogabassey-order-desk", stateless_http=True, json_response=True)
+# The MCP SDK rejects requests whose Host header isn't allow-listed (DNS-rebinding protection, 421
+# "Invalid Host header"). Allow our public hostname: Render sets RENDER_EXTERNAL_HOSTNAME; ALLOWED_HOSTS
+# (comma-separated) overrides for other hosts. Bearer auth in build_app() is what actually gates access.
+_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", os.getenv("RENDER_EXTERNAL_HOSTNAME", "")).split(",") if h.strip()]
+mcp = FastMCP(
+    "ogabassey-order-desk", stateless_http=True, json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[*_hosts, "localhost:*", "127.0.0.1:*"],
+        allowed_origins=[*(f"https://{h}" for h in _hosts), "http://localhost:*", "http://127.0.0.1:*"],
+    ),
+)
 
 # VERIFY all three sets against Bumpa's real payment statuses. "completed" is deliberately NOT in PAID:
 # it may describe the checkout, not the payment.
