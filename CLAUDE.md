@@ -11,7 +11,7 @@ Graders weight integration and payment/merchant systems most heavily, so real AP
 ```
 CLAUDE.md                          this file
 FIELD_NOTES.md                     running log of build/deploy problems (most important deliverable)
-skills/ogabassey-order-desk.md     Chord skill file (business context, workflow, rules)   [not yet in this folder]
+skills/ogabassey-order-desk.md     Chord skill file (business context, workflow, rules)
 mcp-server/                        [currently flat in the repo root]
   server.py    FastMCP tool server (8 tools), bearer auth, /health
   bumpa.py     Bumpa API client; ALL endpoint paths and assumed response fields live here
@@ -47,4 +47,4 @@ Python 3.11+, the `mcp` SDK pinned `<2` (v2 renamed FastMCP to MCPServer; don't 
 - Keep changes small and explain them in a sentence or two.
 
 ## Current status
-Done: skill file draft; MCP server with 8 tools; local tests passed (tool listing over HTTP, 401 without token, payment guard, idempotent finalize, IMEI Luhn check). Not yet tested against real Bumpa: every network call failed in the original sandbox (no internet).
+Done: skill file; MCP server with 8 tools, deployed on Render (Postgres state). Tested end to end locally against Bumpa staging (draft, Paystack test payment, verify, finalize, IMEI). Not yet tested through Chord/WhatsApp, with variants, or failed payments.

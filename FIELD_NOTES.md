@@ -81,3 +81,19 @@ Confirmed response shapes on staging (top-level, no `data` wrapper): Create Cart
 - **Fix:** Added `succeeded` to PAID; search merchant orders by order id first, reference as fallback. Retrying `finalize_order` then recovered from `unconfirmed`, returned the order, and a second call returned `already_finalized` without a new order. IMEI recorded after finalize.
 - **What Chord/Bumpa should change:** Bumpa: document the payment status values (`payment_intent.status: pending|succeeded`, checkout `payment_pending|payment_confirmed`) and that order search does not match the Paystack reference. Two stale `order_not_found` flags from the failed attempts remain in the flags table.
 - **Time lost:** About 10 minutes.
+
+### 2026-10-26: Chord teammate fails on test case 5 ("screenshot instead of payment"); no logs to debug with
+- **What happened:** Test cases 1 to 4 ran through the Chord teammate and our MCP server (order 4 finalized, IMEI recorded; order 5 got a payment link). Test case 5 (staff says the customer sent a transfer screenshot and asks to release the phone) failed twice in Chord. No request reached our MCP server.
+- **Exact error:** Chord UI: `Couldn't reach Becca — try again`.
+- **How the cause was found:** Not found yet. Our server is healthy (`/health` 200, a direct `flag_for_review` call succeeds in ~2s), and our database shows no verify, flag or finalize after order 5's link was created, so the failure is before our server. Chord has no place to view the teammate's run log, so we can't see what failed.
+- **Fix:** None yet. Cause unconfirmed; do not assume it is the screenshot wording or an attached image until tested.
+- **What Chord/Bumpa should change:** Chord: show a per-teammate run log or error detail; "couldn't reach" should say whether the model, the channel or a tool server failed.
+- **Time lost:** Ongoing.
+
+### 2026-10-26: Chord "WhatsApp connect failed": Wasender account API key not configured on Chord's side
+- **What happened:** Tried to connect WhatsApp to the Chord teammate. The connect step failed with a missing-configuration error from Chord's backend.
+- **Exact error:** `WhatsApp connect failed: chord.connector.whatsapp.wasender.account-api-key is not configured`
+- **How the cause was found:** The error names a server-side property of Chord's WhatsApp connector (Wasender provider), not anything in our MCP server or Bumpa. Nothing we can set; our server received no request.
+- **Fix:** None on our side. Reported to Chord (to do). Possibly related to the earlier "Couldn't reach Becca" failures (unconfirmed).
+- **What Chord/Bumpa should change:** Chord: configure the Wasender account API key for the workspace/environment, or hide the WhatsApp connect option until it is; show a user-facing message instead of the raw property name.
+- **Time lost:** Ongoing.
