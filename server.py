@@ -44,7 +44,7 @@ mcp = FastMCP(
 
 # VERIFY all three sets against Bumpa's real payment statuses. "completed" is deliberately NOT in PAID:
 # it may describe the checkout, not the payment.
-PAID = {"paid", "success", "successful"}
+PAID = {"paid", "success", "successful", "succeeded"}  # "succeeded" confirmed on staging 2026-10-26
 PENDING = {"pending", "processing", "initiated", "awaiting_payment"}
 FAILED = {"failed", "abandoned", "cancelled", "expired", "reversed"}
 
@@ -142,14 +142,15 @@ def create_order_draft(product_id: str, quantity: int, customer_name: str, custo
         return fail("email_required", "I need the customer's email address before I can create the payment link.")
     first, _, last = customer_name.strip().partition(" ")
     try:
-        cart, headers = bumpa.call("create_cart", json={"location_id": bumpa.location_id()})
+        loc = {"location_id": bumpa.location_id()} if bumpa.location_id() is not None else {}
+        cart, headers = bumpa.call("create_cart", json=loc)
         # Docs: guest mode returns the token as cart_token. VERIFY whether it is in the body, a header, or both.
         cart_token = headers.get("X-Cart-Token") or pick(cart, "cart_token", "data.cart_token", "data.token")
-        cart_id = pick(cart, "data.id", "id", "data.cart_id", "cart_id", "data.cart.id")  # VERIFY response path
+        cart_id = pick(cart, "id", "data.id", "data.cart_id", "cart_id", "data.cart.id")  # confirmed: top-level "id" (UUID)
         if not cart_token or cart_id is None:
             return fail("bumpa_unexpected_response", "Bumpa created a cart but I couldn't read it back. "
                         "Nothing was ordered; try again.", raw_keys=list(cart.keys()) if isinstance(cart, dict) else None)
-        item = {"location_id": bumpa.location_id(), "product_id": product_id, "quantity": quantity}
+        item = {**loc, "product_id": product_id, "quantity": quantity}
         if variant_id:
             item["product_variation_id"] = variant_id
         bumpa.call("add_cart_item", json=item, cart_token=cart_token)
@@ -168,7 +169,7 @@ def create_order_draft(product_id: str, quantity: int, customer_name: str, custo
             checkout_body["fulfillment_context"] = {"type": "delivery",
                                                     "shipping_method_id": int(os.environ["BUMPA_SHIPPING_METHOD_ID"])}
         checkout, _ = bumpa.call("create_checkout", cart_token=cart_token, json=checkout_body)
-        checkout_id = pick(checkout, "data.id", "id", "data.checkout_id")  # VERIFY response path
+        checkout_id = pick(checkout, "id", "data.id", "data.checkout_id")  # confirmed: top-level numeric "id"
         if checkout_id is None:
             return fail("bumpa_unexpected_response", "Bumpa created the checkout but I couldn't read its id. "
                         "Nothing was ordered; try again.", raw_keys=list(checkout.keys()) if isinstance(checkout, dict) else None)
@@ -239,11 +240,14 @@ def verify_payment(checkout_id: str) -> dict:
     except BumpaError as e:
         return bumpa_fail(e, "check the payment")
 
-    # VERIFY all of these response paths against a real Get Checkout response.
-    status = str(pick(body, "data.payment.status", "data.payment_status", "payment_status", default="")).lower()
-    paid = pick(body, "data.payment.amount", "data.amount_paid", "amount_paid")
+    # Confirmed on staging 2026-10-26: Get Checkout is top-level; payment state is payment_intent.status
+    # (seen: "pending", checkout status "payment_pending"), amount in naira in payment_intent.amount.
+    # VERIFY the status word after a real (test) payment; the other paths are fallbacks.
+    status = str(pick(body, "payment_intent.status", "data.payment_intent.status", "data.payment.status",
+                      "data.payment_status", "payment_status", default="")).lower()
+    paid = pick(body, "payment_intent.amount", "data.payment_intent.amount", "data.payment.amount", "amount_paid")
     if paid is None:
-        minor = pick(body, "data.payment.amount_minor", "data.amount_minor", "amount_minor")
+        minor = pick(body, "payment_intent.amount_minor", "data.payment.amount_minor", "amount_minor")
         paid = float(minor) / 100 if minor is not None else None
     expected = order["expected_total"] or 0
 
@@ -296,7 +300,8 @@ def finalize_order(checkout_id: str) -> dict:
     reference = order["payment_reference"]
     # Confirm on the merchant side (explicit location_id) that the order really landed.
     found = None
-    search = reference or order_id
+    # Bumpa's order search matches the order id, not the Paystack reference (confirmed on staging).
+    search = order_id or reference
     for attempt in range(2 if search else 0):
         try:
             orders, _ = bumpa.call("list_orders", params={"search": search})

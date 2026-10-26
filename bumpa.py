@@ -10,7 +10,7 @@ import os
 import time
 import httpx
 
-BASE_URL = os.getenv("BUMPA_BASE_URL", "https://api.bumpa.xyz/api/commerce/v1")  # staging
+BASE_URL = os.getenv("BUMPA_BASE_URL", "https://staging.bumpa.xyz/api/commerce/v1")  # staging
 PUBLIC_KEY = os.getenv("BUMPA_PUBLIC_KEY", "")
 SECRET_KEY = os.getenv("BUMPA_SECRET_KEY", "")
 LOCATION_ID = os.getenv("BUMPA_LOCATION_ID", "")  # always sent: merchant routes silently fall back to default without it
@@ -32,7 +32,10 @@ LOCATION_PARAM_ROUTES = {"list_products", "list_orders"}  # take location_id as 
 
 
 def location_id():
-    """Numeric when possible: the docs send location_id as a JSON number in bodies."""
+    """Numeric when possible: the docs send location_id as a JSON number in bodies.
+    None when unset, so callers omit it and Bumpa uses the store default (sending "" gets a 422)."""
+    if not LOCATION_ID:
+        return None
     return int(LOCATION_ID) if LOCATION_ID.isdigit() else LOCATION_ID
 
 

@@ -9,7 +9,7 @@ services:
       - key: DATABASE_URL
         sync: false  # external Postgres connection string, set in the Render dashboard
       - key: BUMPA_BASE_URL
-        value: https://api.bumpa.xyz/api/commerce/v1
+        value: https://staging.bumpa.xyz/api/commerce/v1
       - key: BUMPA_PUBLIC_KEY
         sync: false
       - key: BUMPA_SECRET_KEY

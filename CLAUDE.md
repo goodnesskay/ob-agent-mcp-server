@@ -23,7 +23,7 @@ mcp-server/                        [currently flat in the repo root]
 Python 3.11+, the `mcp` SDK pinned `<2` (v2 renamed FastMCP to MCPServer; don't upgrade), httpx, uvicorn, psycopg (Postgres). Hosted on Render. Chord connects to it as a remote MCP server over streamable HTTP at `/mcp`, with `Authorization: Bearer $MCP_AUTH_TOKEN`.
 
 ## Bumpa API (staging)
-- Base: `https://api.bumpa.xyz/api/commerce/v1`. Docs: https://docs.bumpa.io
+- Base: `https://staging.bumpa.xyz/api/commerce/v1`. Docs: https://docs.bumpa.io
 - Public key (`X-Api-Key`) for catalog, cart and checkout. Secret key for merchant orders and analytics.
 - Guest cart and checkout need `X-Cart-Token`, returned after cart creation.
 - Merchant routes are location-scoped. ALWAYS pass `location_id` (it silently falls back to the default otherwise).
